@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: api_tutorial_python_postgres_postgres
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: apppass
+      POSTGRES_DB: appdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro  # 初期化SQLを格納するフォルダ（起動時に実行）
+    healthcheck:  # コンテナの起動確認をする設定
+      test: ["CMD-SHELL", "pg_isready -U appuser -d appdb"]  # DBに接続できるか確認
+      interval: 5s   # 5秒ごとに確認
+      timeout: 3s    # 3秒待って応答がなければ失敗と判定
+      retries: 10    # 最大10回リトライ
+    networks:
+      - appnet2  # 他のサービスと共通のネットワークに接続
+
+  calc_engine:
+    build: ./api-server  # ./api-server フォルダにあるDockerfileをビルドしてコンテナ作成
+    ports:
+      - "8000:8000"  # 計算エンジン用のAPIサーバ（FastAPIなどを想定）
+    # ⬇ これを追加：DBがhealthyになってから起動
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # アプリ側から参照するDB接続文字列
+      DATABASE_URL: postgresql+psycopg2://appuser:apppass@postgres:5432/appdb
+    networks:
+      - appnet2
+
+networks:
+  appnet2:  # すべてのサービスが接続する共通ネットワーク
+
+volumes:
+  pg_data:  # postgres のデータを永続化(コンテナを削除しても残る)するボリューム(データ)
